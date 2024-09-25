@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 
-# Function to load and clean data with explicit dtypes
+# Function to load and clean data with caching to minimize re-loading
+@st.cache_data
 def load_and_clean_data(file_path):
-    # Explicitly define the dtypes of each column to avoid mixed-type issues
+    # Explicitly define the dtypes to reduce memory consumption
     dtype_mapping = {
         'ID': 'float64',  # Convert to int later
         'species': 'str',
@@ -12,30 +13,19 @@ def load_and_clean_data(file_path):
         'strain_number_header': 'str',  # Skip this in output
     }
     
-    # Use low_memory=False to suppress warnings
-    df = pd.read_csv(file_path, dtype=dtype_mapping, low_memory=False)
+    # Use 'usecols' to only load necessary columns
+    usecols = ['ID', 'species', 'is_type_strain_header', 'acetylene']  # Add other metabolite columns as needed
+    df = pd.read_csv(file_path, dtype=dtype_mapping, usecols=usecols, low_memory=False)
     
-    # Convert 'ID' and 'is_type_strain_header' to integers
+    # Convert 'ID' and 'is_type_strain_header' to integers to reduce memory
     df['ID'] = df['ID'].fillna(0).astype(int)
     df['is_type_strain_header'] = df['is_type_strain_header'].fillna(0).astype(int)
     
-    # Drop the 'strain_number_header' column
-    df = df.drop(columns=['strain_number_header'])
-    
     return df
-
-# Function to filter based on type strain checkbox
-def filter_by_type_strain(df, type_strain_value):
-    return df[df['is_type_strain_header'] == type_strain_value]
-
-# Load the datasets
-prod_df = load_and_clean_data('metabolites/prod.csv')
-util_df = load_and_clean_data('metabolites/util.csv')
-anti_df = load_and_clean_data('metabolites/anti.csv')
 
 # Function to count total occurrences of metabolites
 def count_metabolites(df):
-    metabolite_columns = df.columns[4:]  # Assuming metabolites start from the 5th column
+    metabolite_columns = df.columns[3:]  # Assuming metabolites start from the 4th column
     return df[metabolite_columns].sum()
 
 # Function to compute broad statistics table
@@ -70,6 +60,11 @@ def compute_statistics(prod_df, util_df, anti_df):
 # Streamlit App
 st.title("Metabolites Overview")
 
+# Load the datasets with caching to reduce memory usage
+prod_df = load_and_clean_data('metabolites/prod.csv')
+util_df = load_and_clean_data('metabolites/util.csv')
+anti_df = load_and_clean_data('metabolites/anti.csv')
+
 # Always display broad statistics table
 st.write("### Broad Statistics for Type and Non-Type Strains")
 stats_df = compute_statistics(prod_df, util_df, anti_df)
@@ -82,13 +77,13 @@ show_type_strain_0 = st.sidebar.checkbox("Show Non-Type Strain (0)", value=True)
 
 # Filter data based on checkboxes
 if show_type_strain_1 and not show_type_strain_0:
-    prod_df_filtered = filter_by_type_strain(prod_df, 1)
-    util_df_filtered = filter_by_type_strain(util_df, 1)
-    anti_df_filtered = filter_by_type_strain(anti_df, 1)
+    prod_df_filtered = prod_df[prod_df['is_type_strain_header'] == 1]
+    util_df_filtered = util_df[util_df['is_type_strain_header'] == 1]
+    anti_df_filtered = anti_df[anti_df['is_type_strain_header'] == 1]
 elif not show_type_strain_1 and show_type_strain_0:
-    prod_df_filtered = filter_by_type_strain(prod_df, 0)
-    util_df_filtered = filter_by_type_strain(util_df, 0)
-    anti_df_filtered = filter_by_type_strain(anti_df, 0)
+    prod_df_filtered = prod_df[prod_df['is_type_strain_header'] == 0]
+    util_df_filtered = util_df[util_df['is_type_strain_header'] == 0]
+    anti_df_filtered = anti_df[anti_df['is_type_strain_header'] == 0]
 else:
     # Show both by default if both checkboxes are checked
     prod_df_filtered = prod_df
